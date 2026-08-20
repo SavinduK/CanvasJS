@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Stylus Web Canvas</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- jsPDF for exporting multi-page PDFs -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <style>
+    /* Lock root elements to eliminate elastic bounce and scrollbars */
+    html, body {
+      width: 100%;
+      height: 100%;
+      height: 100dvh; /* Dynamic viewport height for modern tablet Safari/Chrome */
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      touch-action: none;
+      overscroll-behavior: none;
+      position: fixed; /* Fixes browser viewport shifting */
+      inset: 0;
+    }
+
+    /* Grid pattern background */
+    .canvas-bg {
+      background-color: #ffffff;
+      background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+  </style>
+</head>
+<body class="bg-gray-200 flex flex-col font-sans select-none overflow-hidden">
+
+  <!-- CANVAS CONTAINER (Dynamically stretches to fill screen above bottom bar) -->
+  <main class="flex-1 min-h-0 w-full p-2 sm:p-4 flex items-center justify-center relative overflow-hidden">
+    <div id="canvasWrapper" class="w-full h-full bg-white shadow-xl rounded-lg overflow-hidden border border-gray-300 relative flex items-center justify-center">
+      <canvas id="drawingCanvas" class="canvas-bg block w-full h-full cursor-crosshair"></canvas>
+    </div>
+  </main>
+
+  <!-- BOTTOM TOOLBAR (Fixed height, safe from overlapping) -->
+  <footer class="shrink-0 bg-white border-t border-gray-200 px-3 py-2 flex flex-wrap items-center justify-between gap-2 shadow-lg z-10">
+    
+    <!-- Tools & Properties -->
+    <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
+      <div class="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
+        <button id="penBtn" class="px-3 py-1 rounded-md text-xs sm:text-sm font-medium bg-white shadow-sm text-gray-800">Pen</button>
+        <button id="highlighterBtn" class="px-3 py-1 rounded-md text-xs sm:text-sm font-medium text-gray-600 hover:text-gray-800">Highlighter</button>
+        <button id="eraserBtn" class="px-3 py-1 rounded-md text-xs sm:text-sm font-medium text-gray-600 hover:text-gray-800">Eraser</button>
+      </div>
+
+      <div class="h-5 w-px bg-gray-300"></div>
+
+      <!-- Color Picker -->
+      <div class="flex items-center gap-1.5">
+        <label for="colorPicker" class="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase">Color</label>
+        <input type="color" id="colorPicker" value="#000000" class="w-7 h-7 rounded border border-gray-300 cursor-pointer bg-transparent">
+      </div>
+
+      <!-- Size Slider -->
+      <div class="flex items-center gap-1.5">
+        <label for="sizeSlider" class="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase">Size</label>
+        <input type="range" id="sizeSlider" min="1" max="50" value="5" class="w-20 sm:w-24 border-gray-300">
+        <span id="sizeVal" class="text-xs text-gray-600 w-6">5px</span>
+      </div>
+
+      <!-- Pressure Toggle -->
+      <label class="flex items-center gap-1 cursor-pointer ml-1">
+        <input type="checkbox" id="pressureToggle" checked class="rounded text-blue-600 focus:ring-0">
+        <span class="text-xs text-gray-600">Pressure</span>
+      </label>
+    </div>
+
+    <!-- Page Controls & Exports -->
+    <div class="flex items-center gap-2 sm:gap-3">
+      <div class="flex items-center gap-1.5 bg-gray-50 px-2 py-1 rounded-lg border border-gray-200">
+        <button id="prevPage" class="px-2 py-0.5 bg-white border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-40 text-xs font-bold">&lt;</button>
+        <span id="pageIndicator" class="text-xs font-semibold text-gray-700 min-w-[65px] text-center">Page 1 / 1</span>
+        <button id="nextPage" class="px-2 py-0.5 bg-white border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-40 text-xs font-bold">&gt;</button>
+        <button id="newPage" class="px-2 py-0.5 bg-blue-500 text-white rounded hover:bg-blue-600 text-xs font-semibold">+ New</button>
+      </div>
+
+      <div class="h-5 w-px bg-gray-300"></div>
+
+      <button id="clearBtn" class="px-2.5 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-semibold border border-red-200">Clear</button>
+      <button id="exportImgBtn" class="px-2.5 py-1 bg-gray-800 text-white hover:bg-gray-900 rounded-lg text-xs font-semibold">PNG</button>
+      <button id="exportPdfBtn" class="px-2.5 py-1 bg-green-600 text-white hover:bg-green-700 rounded-lg text-xs font-semibold">PDF</button>
+    </div>
+  </footer>
+
+  <script>
+    // --- PREVENT ALL MOBILE BOUNCE SCROLLING ---
+    document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+
+    // --- APP STATE ---
+    const pages = [];
+    let currentPageIndex = 0;
+    
+    let currentTool = 'pen';
+    let currentColor = '#000000';
+    let baseSize = 5;
+    let usePressure = true;
+
+    let isDrawing = false;
+    let lastX = 0;
+    let lastY = 0;
+
+    // --- DOM ELEMENTS ---
+    const wrapper = document.getElementById('canvasWrapper');
+    const canvas = document.getElementById('drawingCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const penBtn = document.getElementById('penBtn');
+    const highlighterBtn = document.getElementById('highlighterBtn');
+    const eraserBtn = document.getElementById('eraserBtn');
+    
+    const colorPicker = document.getElementById('colorPicker');
+    const sizeSlider = document.getElementById('sizeSlider');
+    const sizeVal = document.getElementById('sizeVal');
+    const pressureToggle = document.getElementById('pressureToggle');
+
+    const prevPageBtn = document.getElementById('prevPage');
+    const nextPageBtn = document.getElementById('nextPage');
+    const newPageBtn = document.getElementById('newPage');
+    const pageIndicator = document.getElementById('pageIndicator');
+
+    const clearBtn = document.getElementById('clearBtn');
+    const exportImgBtn = document.getElementById('exportImgBtn');
+    const exportPdfBtn = document.getElementById('exportPdfBtn');
+
+    // --- DYNAMIC RESIZING TO FIT SCREEN ---
+    function resizeCanvas() {
+      // Create temporary canvas to preserve user drawing on resize or tablet rotate
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height;
+      const tempCtx = tempCanvas.getContext('2d');
+      if (canvas.width > 0 && canvas.height > 0) {
+        tempCtx.drawImage(canvas, 0, 0);
+      }
+
+      // Read exact pixel dimensions of container
+      const rect = wrapper.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      
+      ctx.scale(dpr, dpr);
+
+      // Reload drawing or restore previous content
+      if (pages[currentPageIndex]) {
+        loadPageContent(currentPageIndex);
+      } else {
+        ctx.drawImage(tempCanvas, 0, 0, rect.width, rect.height);
+        saveCurrentPageContent();
+      }
+    }
+
+    // --- PAGE MANAGEMENT ---
+    function saveCurrentPageContent() {
+      pages[currentPageIndex] = canvas.toDataURL('image/png');
+    }
+
+    function loadPageContent(index) {
+      const img = new Image();
+      img.src = pages[index];
+      img.onload = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width / (window.devicePixelRatio || 1), canvas.height / (window.devicePixelRatio || 1));
+      };
+    }
+
+    function updatePageUI() {
+      pageIndicator.textContent = `Page ${currentPageIndex + 1} / ${pages.length}`;
+      prevPageBtn.disabled = currentPageIndex === 0;
+      nextPageBtn.disabled = currentPageIndex === pages.length - 1;
+    }
+
+    function createNewPage() {
+      saveCurrentPageContent();
+      pages.push('');
+      currentPageIndex = pages.length - 1;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      saveCurrentPageContent();
+      updatePageUI();
+    }
+
+    window.addEventListener('load', () => {
+      pages.push('');
+      resizeCanvas();
+      updatePageUI();
+    });
+
+    // Handle screen resize & tablet rotation
+    window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 150));
+
+    // --- DRAWING LOGIC (STYLUS ONLY) ---
+    function getCanvasCoordinates(e) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      };
+    }
+
+    function startDrawing(e) {
+      // Strictly ignore fingers (touch). Allow mouse and pen/stylus
+      if (e.pointerType === 'touch') return;
+
+      isDrawing = true;
+      const coords = getCanvasCoordinates(e);
+      lastX = coords.x;
+      lastY = coords.y;
+    }
+
+    function draw(e) {
+      if (!isDrawing || e.pointerType === 'touch') return;
+
+      const coords = getCanvasCoordinates(e);
+      const currentX = coords.x;
+      const currentY = coords.y;
+
+      let pressure = e.pressure;
+      if (!usePressure || pressure === 0 || pressure === undefined) {
+        pressure = 0.5;
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(lastX, lastY);
+      ctx.lineTo(currentX, currentY);
+
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      if (currentTool === 'pen') {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = currentColor;
+        ctx.lineWidth = baseSize * (pressure * 2);
+      } else if (currentTool === 'highlighter') {
+        ctx.globalCompositeOperation = 'multiply';
+        ctx.strokeStyle = currentColor + '80'; 
+        ctx.lineWidth = baseSize * 3;
+      } else if (currentTool === 'eraser') {
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.lineWidth = baseSize * 4;
+      }
+
+      ctx.stroke();
+
+      lastX = currentX;
+      lastY = currentY;
+    }
+
+    function stopDrawing() {
+      if (isDrawing) {
+        isDrawing = false;
+        saveCurrentPageContent();
+      }
+    }
+
+    // Event Listeners
+    canvas.addEventListener('pointerdown', (e) => { if (e.button === 0) startDrawing(e); });
+    canvas.addEventListener('pointermove', draw);
+    canvas.addEventListener('pointerup', stopDrawing);
+    canvas.addEventListener('pointerleave', stopDrawing);
+    canvas.addEventListener('pointercancel', stopDrawing);
+
+    // Tools & Controls
+    function setTool(tool) {
+      currentTool = tool;
+      [penBtn, highlighterBtn, eraserBtn].forEach(btn => {
+        btn.classList.remove('bg-white', 'shadow-sm', 'text-gray-800');
+        btn.classList.add('text-gray-600');
+      });
+
+      const activeBtn = tool === 'pen' ? penBtn : tool === 'highlighter' ? highlighterBtn : eraserBtn;
+      activeBtn.classList.add('bg-white', 'shadow-sm', 'text-gray-800');
+      activeBtn.classList.remove('text-gray-600');
+    }
+
+    penBtn.addEventListener('click', () => setTool('pen'));
+    highlighterBtn.addEventListener('click', () => setTool('highlighter'));
+    eraserBtn.addEventListener('click', () => setTool('eraser'));
+
+    colorPicker.addEventListener('input', (e) => currentColor = e.target.value);
+    sizeSlider.addEventListener('input', (e) => {
+      baseSize = e.target.value;
+      sizeVal.textContent = `${baseSize}px`;
+    });
+    pressureToggle.addEventListener('change', (e) => usePressure = e.target.checked);
+
+    prevPageBtn.addEventListener('click', () => {
+      if (currentPageIndex > 0) {
+        saveCurrentPageContent();
+        currentPageIndex--;
+        loadPageContent(currentPageIndex);
+        updatePageUI();
+      }
+    });
+
+    nextPageBtn.addEventListener('click', () => {
+      if (currentPageIndex < pages.length - 1) {
+        saveCurrentPageContent();
+        currentPageIndex++;
+        loadPageContent(currentPageIndex);
+        updatePageUI();
+      }
+    });
+
+    newPageBtn.addEventListener('click', createNewPage);
+
+    clearBtn.addEventListener('click', () => {
+      if (confirm('Clear current page?')) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        saveCurrentPageContent();
+      }
+    });
+
+    // Export Handlers
+    exportImgBtn.addEventListener('click', () => {
+      saveCurrentPageContent();
+      const exportCanvas = document.createElement('canvas');
+      exportCanvas.width = canvas.width;
+      exportCanvas.height = canvas.height;
+      const expCtx = exportCanvas.getContext('2d');
+      
+      expCtx.fillStyle = '#FFFFFF';
+      expCtx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+      expCtx.drawImage(canvas, 0, 0);
+
+      const link = document.createElement('a');
+      link.download = `drawing-page-${currentPageIndex + 1}.png`;
+      link.href = exportCanvas.toDataURL('image/png');
+      link.click();
+    });
+
+    exportPdfBtn.addEventListener('click', async () => {
+      saveCurrentPageContent();
+      const { jsPDF } = window.jspdf;
+      let pdf = null;
+
+      for (let i = 0; i < pages.length; i++) {
+        const img = new Image();
+        img.src = pages[i];
+
+        await new Promise((resolve) => {
+          img.onload = () => {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = canvas.width;
+            tempCanvas.height = canvas.height;
+            const tempCtx = tempCanvas.getContext('2d');
+
+            tempCtx.fillStyle = '#FFFFFF';
+            tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+            tempCtx.drawImage(img, 0, 0);
+
+            const imgData = tempCanvas.toDataURL('image/jpeg', 0.95);
+            const isLandscape = canvas.width > canvas.height;
+            const orientation = isLandscape ? 'l' : 'p';
+
+            if (i === 0) {
+              pdf = new jsPDF(orientation, 'px', [canvas.width, canvas.height]);
+            } else {
+              pdf.addPage([canvas.width, canvas.height], orientation);
+            }
+
+            pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height);
+            resolve();
+          };
+        });
+      }
+
+      if (pdf) {
+        pdf.save('my-drawings.pdf');
+      }
+    });
+  </script>
+</body>
+</html>
