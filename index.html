@@ -4,381 +4,950 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Stylus Web Canvas</title>
-  
-  <!-- Tailwind CSS -->
+
+  <!-- Tailwind CSS & Lucide Icons -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
   <!-- jsPDF for exporting multi-page PDFs -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
   <style>
-    /* Lock root elements to eliminate elastic bounce and scrollbars */
+    /* Global Lock */
     html, body {
       width: 100%;
       height: 100%;
-      height: 100dvh; /* Dynamic viewport height for modern tablet Safari/Chrome */
+      height: 100dvh;
       margin: 0;
       padding: 0;
       overflow: hidden;
       touch-action: none;
       overscroll-behavior: none;
-      position: fixed; /* Fixes browser viewport shifting */
+      position: fixed;
       inset: 0;
+      background-color: #121212;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
 
-    /* Grid pattern background */
-    .canvas-bg {
-      background-color: #ffffff;
-      background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
-      background-size: 20px 20px;
+    /* Custom Scrollbar for Dropdowns */
+    ::-webkit-scrollbar {
+      width: 4px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #4b5563;
+      border-radius: 4px;
+    }
+
+    /* Floating Dock Styling */
+    .dock-glass {
+      background: rgba(28, 28, 30, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .tool-popover {
+      background: #1c1c1e;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+    }
+
+    /* Tool Preview Cursor */
+    #toolCursor {
+      position: absolute;
+      pointer-events: none;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 40;
+      display: none;
+      box-sizing: border-box;
     }
   </style>
 </head>
-<body class="bg-gray-200 flex flex-col font-sans select-none overflow-hidden">
+<body class="flex flex-col select-none">
 
-  <!-- CANVAS CONTAINER (Dynamically stretches to fill screen above bottom bar) -->
-  <main class="flex-1 min-h-0 w-full p-2 sm:p-4 flex items-center justify-center relative overflow-hidden">
-    <div id="canvasWrapper" class="w-full h-full bg-white shadow-xl rounded-lg overflow-hidden border border-gray-300 relative flex items-center justify-center">
-      <canvas id="drawingCanvas" class="canvas-bg block w-full h-full cursor-crosshair"></canvas>
-    </div>
-  </main>
+  <!-- TOP HEADER / NAVBAR -->
+  <header class="h-14 shrink-0 px-4 flex items-center justify-between border-b border-white/10 bg-[#18181b] z-20">
+    <!-- Left: Title & Page Navigation -->
+    <div class="flex items-center gap-3">
+      <button class="p-2 rounded-lg hover:bg-white/5 text-gray-300">
+        <i data-lucide="chevron-left" class="w-5 h-5"></i>
+      </button>
+      <input type="text" value="Untitled Note" class="bg-transparent text-sm sm:text-base font-semibold focus:outline-none border-b border-transparent focus:border-blue-500 px-1 py-0.5 text-white w-32 sm:w-48">
+      
+      <div class="h-4 w-px bg-white/10 mx-1"></div>
 
-  <!-- BOTTOM TOOLBAR (Fixed height, safe from overlapping) -->
-  <footer class="shrink-0 bg-white border-t border-gray-200 px-3 py-2 flex flex-wrap items-center justify-between gap-2 shadow-lg z-10">
-    
-    <!-- Tools & Properties -->
-    <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
-      <div class="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
-        <button id="penBtn" class="px-3 py-1 rounded-md text-xs sm:text-sm font-medium bg-white shadow-sm text-gray-800">Pen</button>
-        <button id="highlighterBtn" class="px-3 py-1 rounded-md text-xs sm:text-sm font-medium text-gray-600 hover:text-gray-800">Highlighter</button>
-        <button id="eraserBtn" class="px-3 py-1 rounded-md text-xs sm:text-sm font-medium text-gray-600 hover:text-gray-800">Eraser</button>
+      <!-- Page Controls -->
+      <div class="flex items-center gap-1 bg-white/5 rounded-lg p-1 border border-white/10">
+        <button id="prevPage" class="p-1 rounded hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent text-gray-300">
+          <i data-lucide="chevron-left" class="w-4 h-4"></i>
+        </button>
+        <span id="pageIndicator" class="text-xs font-mono font-medium px-2 text-gray-300">1 / 1</span>
+        <button id="nextPage" class="p-1 rounded hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent text-gray-300">
+          <i data-lucide="chevron-right" class="w-4 h-4"></i>
+        </button>
+        <button id="newPage" class="p-1 rounded hover:bg-white/10 text-blue-400 ml-1" title="Add Page (Keep Style)">
+          <i data-lucide="plus" class="w-4 h-4"></i>
+        </button>
       </div>
+    </div>
 
-      <div class="h-5 w-px bg-gray-300"></div>
+    <!-- Right: Header Controls & Dropdown Menu -->
+    <div class="flex items-center gap-2">
+      <!-- Settings / Options Menu -->
+      <div class="relative">
+        <button id="menuToggleBtn" class="p-2 rounded-lg hover:bg-white/5 text-gray-300 transition">
+          <i data-lucide="more-vertical" class="w-5 h-5"></i>
+        </button>
 
-      <!-- Color Picker -->
-      <div class="flex items-center gap-1.5">
-        <label for="colorPicker" class="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase">Color</label>
-        <input type="color" id="colorPicker" value="#000000" class="w-7 h-7 rounded border border-gray-300 cursor-pointer bg-transparent">
+        <!-- Dropdown Menu -->
+        <div id="optionsMenu" class="hidden absolute right-0 mt-2 w-56 bg-[#242427] border border-white/10 rounded-xl shadow-2xl py-2 z-50 text-sm">
+          
+          <!-- Page Actions -->
+          <div class="px-3 py-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Actions</div>
+          <button id="clearBtn" class="w-full px-3 py-2 text-left hover:bg-red-500/10 text-red-400 flex items-center gap-2 transition">
+            <i data-lucide="trash-2" class="w-4 h-4 text-red-400"></i> Clear Current Page
+          </button>
+
+          <div class="h-px bg-white/10 my-2"></div>
+
+          <!-- Background Pattern Options -->
+          <div class="px-3 py-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Page Template</div>
+          <button class="template-option w-full px-3 py-2 text-left hover:bg-white/5 flex items-center gap-2 text-gray-200" data-template="ruled">
+            <i data-lucide="align-justify" class="w-4 h-4 text-blue-400"></i> Ruled Lines
+          </button>
+          <button class="template-option w-full px-3 py-2 text-left hover:bg-white/5 flex items-center gap-2 text-gray-200" data-template="grid">
+            <i data-lucide="grid-3x3" class="w-4 h-4 text-emerald-400"></i> Square Grid
+          </button>
+          <button class="template-option w-full px-3 py-2 text-left hover:bg-white/5 flex items-center gap-2 text-gray-200" data-template="flashcard">
+            <i data-lucide="columns-2" class="w-4 h-4 text-purple-400"></i> Flashcards (2 Cards)
+          </button>
+          <button class="template-option w-full px-3 py-2 text-left hover:bg-white/5 flex items-center gap-2 text-gray-200" data-template="blank">
+            <i data-lucide="square" class="w-4 h-4 text-gray-400"></i> Blank Page
+          </button>
+
+          <div class="h-px bg-white/10 my-2"></div>
+
+          <!-- Settings -->
+          <div class="px-3 py-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Settings</div>
+          <label class="px-3 py-2 hover:bg-white/5 flex items-center justify-between cursor-pointer text-gray-200">
+            <span class="flex items-center gap-2"><i data-lucide="sparkles" class="w-4 h-4 text-amber-400"></i> Pressure Sensitivity</span>
+            <input type="checkbox" id="pressureToggle" checked class="rounded border-gray-600 text-blue-500 focus:ring-0">
+          </label>
+
+          <div class="h-px bg-white/10 my-2"></div>
+
+          <!-- Exports -->
+          <div class="px-3 py-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Export</div>
+          <button id="exportImgBtn" class="w-full px-3 py-2 text-left hover:bg-white/5 flex items-center gap-2 text-gray-200">
+            <i data-lucide="image" class="w-4 h-4 text-indigo-400"></i> Export PNG
+          </button>
+          <button id="exportPdfBtn" class="w-full px-3 py-2 text-left hover:bg-white/5 flex items-center gap-2 text-gray-200">
+            <i data-lucide="file-text" class="w-4 h-4 text-rose-400"></i> Export PDF (Fit Canvas)
+          </button>
+
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- CANVAS WORKSPACE -->
+  <main class="flex-1 min-h-0 w-full relative flex items-center justify-center p-2 sm:p-4 bg-[#121212]">
+    <div id="canvasWrapper" class="w-full h-full bg-[#121212] shadow-2xl rounded-2xl overflow-hidden relative cursor-none">
+      <!-- Background Template Canvas Layer -->
+      <canvas id="bgCanvas" class="block absolute inset-0 w-full h-full pointer-events-none z-0"></canvas>
+      <!-- Active Drawing Canvas Layer -->
+      <canvas id="drawingCanvas" class="block absolute inset-0 w-full h-full z-10"></canvas>
+      <!-- Preview Overlay Canvas for Straight Lines & Guides -->
+      <canvas id="previewCanvas" class="block absolute inset-0 w-full h-full pointer-events-none z-20"></canvas>
+      <!-- Tool Cursor Preview Indicator -->
+      <div id="toolCursor"></div>
+    </div>
+
+    <!-- POPOVER TOOL SETTINGS -->
+    <div id="toolPopover" class="hidden absolute bottom-24 left-1/2 -translate-x-1/2 w-[340px] sm:w-[380px] tool-popover rounded-3xl p-4 flex-col gap-4 z-30 transition-all duration-200">
+      
+      <!-- Color Palette -->
+      <div id="colorPalette" class="flex items-center justify-between gap-1">
+        <button class="color-preset w-7 h-7 rounded-full bg-red-500 border-2 border-transparent transition active:scale-95" data-color="#ef4444"></button>
+        <button class="color-preset w-7 h-7 rounded-full bg-amber-400 border-2 border-transparent transition active:scale-95 ring-2 ring-white" data-color="#fbbf24"></button>
+        <button class="color-preset w-7 h-7 rounded-full bg-emerald-500 border-2 border-transparent transition active:scale-95" data-color="#10b981"></button>
+        <button class="color-preset w-7 h-7 rounded-full bg-cyan-400 border-2 border-transparent transition active:scale-95" data-color="#22d3ee"></button>
+        <button class="color-preset w-7 h-7 rounded-full bg-blue-500 border-2 border-transparent transition active:scale-95" data-color="#3b82f6"></button>
+        <button class="color-preset w-7 h-7 rounded-full bg-purple-500 border-2 border-transparent transition active:scale-95" data-color="#a855f7"></button>
+        <button class="color-preset w-7 h-7 rounded-full bg-white border-2 border-transparent transition active:scale-95" data-color="#ffffff"></button>
+        
+        <!-- Custom Color Picker Circle -->
+        <label for="colorPicker" class="relative w-7 h-7 rounded-full border border-white/20 bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 cursor-pointer overflow-hidden flex items-center justify-center">
+          <input type="color" id="colorPicker" value="#fbbf24" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
+          <i data-lucide="pipette" class="w-3.5 h-3.5 text-white drop-shadow"></i>
+        </label>
       </div>
 
       <!-- Size Slider -->
-      <div class="flex items-center gap-1.5">
-        <label for="sizeSlider" class="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase">Size</label>
-        <input type="range" id="sizeSlider" min="1" max="50" value="5" class="w-20 sm:w-24 border-gray-300">
-        <span id="sizeVal" class="text-xs text-gray-600 w-6">5px</span>
+      <div class="flex items-center gap-3 bg-white/5 px-3 py-2 rounded-2xl border border-white/5">
+        <span id="sizeVal" class="text-xs font-mono font-bold text-gray-300 w-8 text-center">7px</span>
+        <input type="range" id="sizeSlider" min="1" max="50" value="7" class="flex-1 accent-blue-500 cursor-pointer">
       </div>
 
-      <!-- Pressure Toggle -->
-      <label class="flex items-center gap-1 cursor-pointer ml-1">
-        <input type="checkbox" id="pressureToggle" checked class="rounded text-blue-600 focus:ring-0">
-        <span class="text-xs text-gray-600">Pressure</span>
-      </label>
+      <!-- Opacity Slider -->
+      <div class="flex items-center gap-3 bg-white/5 px-3 py-2 rounded-2xl border border-white/5">
+        <span class="text-xs font-mono font-bold text-gray-300 w-12 text-center">Opacity</span>
+        <input type="range" id="opacitySlider" min="0.1" max="1" step="0.05" value="0.4" class="flex-1 accent-blue-500 cursor-pointer">
+        <span id="opacityVal" class="text-xs font-mono font-bold text-gray-300 w-8 text-center">40%</span>
+      </div>
     </div>
+  </main>
 
-    <!-- Page Controls & Exports -->
-    <div class="flex items-center gap-2 sm:gap-3">
-      <div class="flex items-center gap-1.5 bg-gray-50 px-2 py-1 rounded-lg border border-gray-200">
-        <button id="prevPage" class="px-2 py-0.5 bg-white border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-40 text-xs font-bold">&lt;</button>
-        <span id="pageIndicator" class="text-xs font-semibold text-gray-700 min-w-[65px] text-center">Page 1 / 1</span>
-        <button id="nextPage" class="px-2 py-0.5 bg-white border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-40 text-xs font-bold">&gt;</button>
-        <button id="newPage" class="px-2 py-0.5 bg-blue-500 text-white rounded hover:bg-blue-600 text-xs font-semibold">+ New</button>
+  <!-- BOTTOM FLOATING TOOLBAR -->
+  <footer class="fixed bottom-4 left-1/2 -translate-x-1/2 z-30">
+    <div class="dock-glass px-4 py-2 rounded-full flex items-center gap-2 sm:gap-4 shadow-2xl">
+      
+      <!-- Keypad/Input Toggle -->
+      <button class="p-2 text-gray-400 hover:text-white rounded-full transition">
+        <i data-lucide="keyboard" class="w-5 h-5"></i>
+      </button>
+
+      <div class="h-5 w-px bg-white/10"></div>
+
+      <!-- Tools Group -->
+      <div class="flex items-center gap-1 sm:gap-2">
+        <!-- Regular Pen (Active Default) -->
+        <button data-tool="pen" class="tool-btn relative p-2 text-blue-400 bg-white/10 rounded-full transition" title="Standard Pen">
+          <i data-lucide="pen" class="w-5 h-5"></i>
+          <span class="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-blue-400 rounded-full"></span>
+        </button>
+
+        <!-- Straight Line Pen -->
+        <button data-tool="linePen" class="tool-btn relative p-2 text-gray-400 hover:text-white rounded-full transition" title="Straight Line Pen">
+          <i data-lucide="minus" class="w-5 h-5"></i>
+        </button>
+
+        <!-- Highlighter -->
+        <button data-tool="highlighter" class="tool-btn relative p-2 text-gray-400 hover:text-white rounded-full transition" title="Uniform Highlighter">
+          <i data-lucide="highlighter" class="w-5 h-5"></i>
+        </button>
+
+        <!-- Pencil -->
+        <button data-tool="pencil" class="tool-btn relative p-2 text-gray-400 hover:text-white rounded-full transition" title="Pencil">
+          <i data-lucide="pencil" class="w-5 h-5"></i>
+        </button>
+
+        <!-- Eraser -->
+        <button data-tool="eraser" class="tool-btn relative p-2 text-gray-400 hover:text-white rounded-full transition" title="Eraser">
+          <i data-lucide="eraser" class="w-5 h-5"></i>
+        </button>
       </div>
 
-      <div class="h-5 w-px bg-gray-300"></div>
+      <div class="h-5 w-px bg-white/10"></div>
 
-      <button id="clearBtn" class="px-2.5 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-semibold border border-red-200">Clear</button>
-      <button id="exportImgBtn" class="px-2.5 py-1 bg-gray-800 text-white hover:bg-gray-900 rounded-lg text-xs font-semibold">PNG</button>
-      <button id="exportPdfBtn" class="px-2.5 py-1 bg-green-600 text-white hover:bg-green-700 rounded-lg text-xs font-semibold">PDF</button>
+      <!-- Actions -->
+      <div class="flex items-center gap-1">
+        <button id="undoBtn" class="p-2 text-gray-400 hover:text-white disabled:opacity-30 disabled:hover:text-gray-400 rounded-full transition" disabled>
+          <i data-lucide="undo-2" class="w-5 h-5"></i>
+        </button>
+        <button id="redoBtn" class="p-2 text-gray-400 hover:text-white disabled:opacity-30 disabled:hover:text-gray-400 rounded-full transition" disabled>
+          <i data-lucide="redo-2" class="w-5 h-5"></i>
+        </button>
+      </div>
+
     </div>
   </footer>
 
+  <!-- JAVASCRIPT MODULAR ENGINE -->
   <script>
-    // --- PREVENT ALL MOBILE BOUNCE SCROLLING ---
-    document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
-
-    // --- APP STATE ---
-    const pages = [];
-    let currentPageIndex = 0;
-    
-    let currentTool = 'pen';
-    let currentColor = '#000000';
-    let baseSize = 5;
-    let usePressure = true;
-
-    let isDrawing = false;
-    let lastX = 0;
-    let lastY = 0;
-
-    // --- DOM ELEMENTS ---
-    const wrapper = document.getElementById('canvasWrapper');
-    const canvas = document.getElementById('drawingCanvas');
-    const ctx = canvas.getContext('2d');
-
-    const penBtn = document.getElementById('penBtn');
-    const highlighterBtn = document.getElementById('highlighterBtn');
-    const eraserBtn = document.getElementById('eraserBtn');
-    
-    const colorPicker = document.getElementById('colorPicker');
-    const sizeSlider = document.getElementById('sizeSlider');
-    const sizeVal = document.getElementById('sizeVal');
-    const pressureToggle = document.getElementById('pressureToggle');
-
-    const prevPageBtn = document.getElementById('prevPage');
-    const nextPageBtn = document.getElementById('nextPage');
-    const newPageBtn = document.getElementById('newPage');
-    const pageIndicator = document.getElementById('pageIndicator');
-
-    const clearBtn = document.getElementById('clearBtn');
-    const exportImgBtn = document.getElementById('exportImgBtn');
-    const exportPdfBtn = document.getElementById('exportPdfBtn');
-
-    // --- DYNAMIC RESIZING TO FIT SCREEN ---
-    function resizeCanvas() {
-      // Create temporary canvas to preserve user drawing on resize or tablet rotate
-      const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = canvas.width;
-      tempCanvas.height = canvas.height;
-      const tempCtx = tempCanvas.getContext('2d');
-      if (canvas.width > 0 && canvas.height > 0) {
-        tempCtx.drawImage(canvas, 0, 0);
-      }
-
-      // Read exact pixel dimensions of container
-      const rect = wrapper.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
+    // --- MODULE: APP STATE ---
+    const AppState = {
+      pages: [],
+      pageTemplates: [],
+      currentPageIndex: 0,
       
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
+      currentTool: 'pen',
+      currentColor: '#fbbf24',
+      baseSize: 7,
+      opacity: 0.4,
+      usePressure: true,
       
-      ctx.scale(dpr, dpr);
+      isDrawing: false,
+      startX: 0,
+      startY: 0,
+      lastX: 0,
+      lastY: 0,
 
-      // Reload drawing or restore previous content
-      if (pages[currentPageIndex]) {
-        loadPageContent(currentPageIndex);
-      } else {
-        ctx.drawImage(tempCanvas, 0, 0, rect.width, rect.height);
-        saveCurrentPageContent();
-      }
-    }
+      strokeCanvas: null,
+      strokeCtx: null,
 
-    // --- PAGE MANAGEMENT ---
-    function saveCurrentPageContent() {
-      pages[currentPageIndex] = canvas.toDataURL('image/png');
-    }
+      history: []
+    };
 
-    function loadPageContent(index) {
-      const img = new Image();
-      img.src = pages[index];
-      img.onload = () => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, canvas.width / (window.devicePixelRatio || 1), canvas.height / (window.devicePixelRatio || 1));
-      };
-    }
-
-    function updatePageUI() {
-      pageIndicator.textContent = `Page ${currentPageIndex + 1} / ${pages.length}`;
-      prevPageBtn.disabled = currentPageIndex === 0;
-      nextPageBtn.disabled = currentPageIndex === pages.length - 1;
-    }
-
-    function createNewPage() {
-      saveCurrentPageContent();
-      pages.push('');
-      currentPageIndex = pages.length - 1;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      saveCurrentPageContent();
-      updatePageUI();
-    }
-
-    window.addEventListener('load', () => {
-      pages.push('');
-      resizeCanvas();
-      updatePageUI();
-    });
-
-    // Handle screen resize & tablet rotation
-    window.addEventListener('resize', resizeCanvas);
-    window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 150));
-
-    // --- DRAWING LOGIC (STYLUS ONLY) ---
-    function getCanvasCoordinates(e) {
-      const rect = canvas.getBoundingClientRect();
-      return {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top
-      };
-    }
-
-    function startDrawing(e) {
-      // Strictly ignore fingers (touch). Allow mouse and pen/stylus
-      if (e.pointerType === 'touch') return;
-
-      isDrawing = true;
-      const coords = getCanvasCoordinates(e);
-      lastX = coords.x;
-      lastY = coords.y;
-    }
-
-    function draw(e) {
-      if (!isDrawing || e.pointerType === 'touch') return;
-
-      const coords = getCanvasCoordinates(e);
-      const currentX = coords.x;
-      const currentY = coords.y;
-
-      let pressure = e.pressure;
-      if (!usePressure || pressure === 0 || pressure === undefined) {
-        pressure = 0.5;
-      }
-
-      ctx.beginPath();
-      ctx.moveTo(lastX, lastY);
-      ctx.lineTo(currentX, currentY);
-
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-
-      if (currentTool === 'pen') {
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.strokeStyle = currentColor;
-        ctx.lineWidth = baseSize * (pressure * 2);
-      } else if (currentTool === 'highlighter') {
-        ctx.globalCompositeOperation = 'multiply';
-        ctx.strokeStyle = currentColor + '80'; 
-        ctx.lineWidth = baseSize * 3;
-      } else if (currentTool === 'eraser') {
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.lineWidth = baseSize * 4;
-      }
-
-      ctx.stroke();
-
-      lastX = currentX;
-      lastY = currentY;
-    }
-
-    function stopDrawing() {
-      if (isDrawing) {
-        isDrawing = false;
-        saveCurrentPageContent();
-      }
-    }
-
-    // Event Listeners
-    canvas.addEventListener('pointerdown', (e) => { if (e.button === 0) startDrawing(e); });
-    canvas.addEventListener('pointermove', draw);
-    canvas.addEventListener('pointerup', stopDrawing);
-    canvas.addEventListener('pointerleave', stopDrawing);
-    canvas.addEventListener('pointercancel', stopDrawing);
-
-    // Tools & Controls
-    function setTool(tool) {
-      currentTool = tool;
-      [penBtn, highlighterBtn, eraserBtn].forEach(btn => {
-        btn.classList.remove('bg-white', 'shadow-sm', 'text-gray-800');
-        btn.classList.add('text-gray-600');
-      });
-
-      const activeBtn = tool === 'pen' ? penBtn : tool === 'highlighter' ? highlighterBtn : eraserBtn;
-      activeBtn.classList.add('bg-white', 'shadow-sm', 'text-gray-800');
-      activeBtn.classList.remove('text-gray-600');
-    }
-
-    penBtn.addEventListener('click', () => setTool('pen'));
-    highlighterBtn.addEventListener('click', () => setTool('highlighter'));
-    eraserBtn.addEventListener('click', () => setTool('eraser'));
-
-    colorPicker.addEventListener('input', (e) => currentColor = e.target.value);
-    sizeSlider.addEventListener('input', (e) => {
-      baseSize = e.target.value;
-      sizeVal.textContent = `${baseSize}px`;
-    });
-    pressureToggle.addEventListener('change', (e) => usePressure = e.target.checked);
-
-    prevPageBtn.addEventListener('click', () => {
-      if (currentPageIndex > 0) {
-        saveCurrentPageContent();
-        currentPageIndex--;
-        loadPageContent(currentPageIndex);
-        updatePageUI();
-      }
-    });
-
-    nextPageBtn.addEventListener('click', () => {
-      if (currentPageIndex < pages.length - 1) {
-        saveCurrentPageContent();
-        currentPageIndex++;
-        loadPageContent(currentPageIndex);
-        updatePageUI();
-      }
-    });
-
-    newPageBtn.addEventListener('click', createNewPage);
-
-    clearBtn.addEventListener('click', () => {
-      if (confirm('Clear current page?')) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        saveCurrentPageContent();
-      }
-    });
-
-    // Export Handlers
-    exportImgBtn.addEventListener('click', () => {
-      saveCurrentPageContent();
-      const exportCanvas = document.createElement('canvas');
-      exportCanvas.width = canvas.width;
-      exportCanvas.height = canvas.height;
-      const expCtx = exportCanvas.getContext('2d');
+    // --- MODULE: DOM ELEMENTS ---
+    const DOM = {
+      wrapper: document.getElementById('canvasWrapper'),
+      bgCanvas: document.getElementById('bgCanvas'),
+      bgCtx: document.getElementById('bgCanvas').getContext('2d'),
+      canvas: document.getElementById('drawingCanvas'),
+      ctx: document.getElementById('drawingCanvas').getContext('2d'),
+      previewCanvas: document.getElementById('previewCanvas'),
+      previewCtx: document.getElementById('previewCanvas').getContext('2d'),
+      toolCursor: document.getElementById('toolCursor'),
       
-      expCtx.fillStyle = '#FFFFFF';
-      expCtx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
-      expCtx.drawImage(canvas, 0, 0);
+      // Header & Navigation
+      prevPageBtn: document.getElementById('prevPage'),
+      nextPageBtn: document.getElementById('nextPage'),
+      newPageBtn: document.getElementById('newPage'),
+      pageIndicator: document.getElementById('pageIndicator'),
+      clearBtn: document.getElementById('clearBtn'),
+      menuToggleBtn: document.getElementById('menuToggleBtn'),
+      optionsMenu: document.getElementById('optionsMenu'),
+      pressureToggle: document.getElementById('pressureToggle'),
+      exportImgBtn: document.getElementById('exportImgBtn'),
+      exportPdfBtn: document.getElementById('exportPdfBtn'),
 
-      const link = document.createElement('a');
-      link.download = `drawing-page-${currentPageIndex + 1}.png`;
-      link.href = exportCanvas.toDataURL('image/png');
-      link.click();
-    });
+      // Floating Dock Tools
+      toolBtns: document.querySelectorAll('.tool-btn'),
+      undoBtn: document.getElementById('undoBtn'),
+      redoBtn: document.getElementById('redoBtn'),
 
-    exportPdfBtn.addEventListener('click', async () => {
-      saveCurrentPageContent();
-      const { jsPDF } = window.jspdf;
-      let pdf = null;
+      // Popover Controls
+      toolPopover: document.getElementById('toolPopover'),
+      colorPicker: document.getElementById('colorPicker'),
+      colorPresets: document.querySelectorAll('.color-preset'),
+      sizeSlider: document.getElementById('sizeSlider'),
+      sizeVal: document.getElementById('sizeVal'),
+      opacitySlider: document.getElementById('opacitySlider'),
+      opacityVal: document.getElementById('opacityVal')
+    };
 
-      for (let i = 0; i < pages.length; i++) {
-        const img = new Image();
-        img.src = pages[i];
+    // --- MODULE: BACKGROUND TEMPLATES ---
+    const TemplateEngine = {
+      drawBackground(ctx, width, height, template) {
+        ctx.save();
+        ctx.clearRect(0, 0, width, height);
 
-        await new Promise((resolve) => {
-          img.onload = () => {
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = canvas.width;
-            tempCanvas.height = canvas.height;
-            const tempCtx = tempCanvas.getContext('2d');
+        if (template === 'flashcard') {
+          ctx.fillStyle = '#121212';
+          ctx.fillRect(0, 0, width, height);
 
-            tempCtx.fillStyle = '#FFFFFF';
-            tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-            tempCtx.drawImage(img, 0, 0);
+          const gap = 16;
+          const cardWidth = (width - gap * 3) / 2;
+          const cardHeight = height - gap * 2;
+          const borderRadius = 16;
 
-            const imgData = tempCanvas.toDataURL('image/jpeg', 0.95);
-            const isLandscape = canvas.width > canvas.height;
-            const orientation = isLandscape ? 'l' : 'p';
+          const drawCard = (x, y, w, h) => {
+            ctx.save();
+            ctx.beginPath();
+            ctx.roundRect(x, y, w, h, borderRadius);
+            ctx.fillStyle = '#1e1e20';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
 
-            if (i === 0) {
-              pdf = new jsPDF(orientation, 'px', [canvas.width, canvas.height]);
-            } else {
-              pdf.addPage([canvas.width, canvas.height], orientation);
+            ctx.clip();
+            ctx.strokeStyle = '#2d2d30';
+            const stepY = 32;
+            for (let ly = y + stepY; ly < y + h; ly += stepY) {
+              ctx.beginPath();
+              ctx.moveTo(x, ly);
+              ctx.lineTo(x + w, ly);
+              ctx.stroke();
             }
-
-            pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height);
-            resolve();
+            ctx.restore();
           };
-        });
-      }
 
-      if (pdf) {
-        pdf.save('my-drawings.pdf');
+          drawCard(gap, gap, cardWidth, cardHeight);
+          drawCard(gap * 2 + cardWidth, gap, cardWidth, cardHeight);
+
+        } else {
+          ctx.fillStyle = '#1e1e20';
+          ctx.fillRect(0, 0, width, height);
+
+          ctx.strokeStyle = '#2d2d30';
+          ctx.lineWidth = 1;
+
+          if (template === 'ruled') {
+            const stepY = 32;
+            for (let y = stepY; y < height; y += stepY) {
+              ctx.beginPath();
+              ctx.moveTo(0, y);
+              ctx.lineTo(width, y);
+              ctx.stroke();
+            }
+          } else if (template === 'grid') {
+            const step = 28;
+            for (let x = step; x < width; x += step) {
+              ctx.beginPath();
+              ctx.moveTo(x, 0);
+              ctx.lineTo(x, height);
+              ctx.stroke();
+            }
+            for (let y = step; y < height; y += step) {
+              ctx.beginPath();
+              ctx.moveTo(0, y);
+              ctx.lineTo(width, y);
+              ctx.stroke();
+            }
+          }
+        }
+
+        ctx.restore();
       }
+    };
+
+    // --- MODULE: HISTORY MANAGER (UNDO / REDO) ---
+    const HistoryManager = {
+      getHistory() {
+        if (!AppState.history[AppState.currentPageIndex]) {
+          AppState.history[AppState.currentPageIndex] = { undoStack: [], redoStack: [] };
+        }
+        return AppState.history[AppState.currentPageIndex];
+      },
+
+      saveState() {
+        const { undoStack, redoStack } = this.getHistory();
+        undoStack.push(DOM.canvas.toDataURL());
+        if (undoStack.length > 30) undoStack.shift();
+        redoStack.length = 0;
+        this.updateButtons();
+      },
+
+      undo() {
+        const { undoStack, redoStack } = this.getHistory();
+        if (undoStack.length === 0) return;
+
+        redoStack.push(DOM.canvas.toDataURL());
+        const previousState = undoStack.pop();
+        this.restoreState(previousState);
+        this.updateButtons();
+      },
+
+      redo() {
+        const { undoStack, redoStack } = this.getHistory();
+        if (redoStack.length === 0) return;
+
+        undoStack.push(DOM.canvas.toDataURL());
+        const nextState = redoStack.pop();
+        this.restoreState(nextState);
+        this.updateButtons();
+      },
+
+      restoreState(dataUrl) {
+        const rect = DOM.wrapper.getBoundingClientRect();
+        DOM.ctx.clearRect(0, 0, rect.width, rect.height);
+        if (dataUrl) {
+          const img = new Image();
+          img.src = dataUrl;
+          img.onload = () => {
+            DOM.ctx.drawImage(img, 0, 0, rect.width, rect.height);
+            PageManager.savePage();
+          };
+        } else {
+          PageManager.savePage();
+        }
+      },
+
+      updateButtons() {
+        const { undoStack, redoStack } = this.getHistory();
+        DOM.undoBtn.disabled = undoStack.length === 0;
+        DOM.redoBtn.disabled = redoStack.length === 0;
+      }
+    };
+
+    // --- MODULE: CANVAS MANAGER ---
+    const CanvasEngine = {
+      init() {
+        AppState.strokeCanvas = document.createElement('canvas');
+        AppState.strokeCtx = AppState.strokeCanvas.getContext('2d');
+
+        window.addEventListener('resize', () => CanvasEngine.resize());
+        window.addEventListener('orientationchange', () => setTimeout(() => CanvasEngine.resize(), 150));
+        CanvasEngine.resize();
+      },
+
+      resize() {
+        const rect = DOM.wrapper.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = DOM.canvas.width;
+        tempCanvas.height = DOM.canvas.height;
+        const tempCtx = tempCanvas.getContext('2d');
+        if (DOM.canvas.width > 0 && DOM.canvas.height > 0) {
+          tempCtx.drawImage(DOM.canvas, 0, 0);
+        }
+
+        [DOM.canvas, DOM.bgCanvas, DOM.previewCanvas, AppState.strokeCanvas].forEach(c => {
+          c.width = rect.width * dpr;
+          c.height = rect.height * dpr;
+        });
+
+        DOM.ctx.scale(dpr, dpr);
+        DOM.bgCtx.scale(dpr, dpr);
+        DOM.previewCtx.scale(dpr, dpr);
+        AppState.strokeCtx.scale(dpr, dpr);
+
+        TemplateEngine.drawBackground(DOM.bgCtx, rect.width, rect.height, AppState.pageTemplates[AppState.currentPageIndex] || 'ruled');
+
+        if (AppState.pages[AppState.currentPageIndex]) {
+          PageManager.loadPage(AppState.currentPageIndex);
+        } else if (tempCanvas.width > 0) {
+          DOM.ctx.drawImage(tempCanvas, 0, 0, rect.width, rect.height);
+          PageManager.savePage();
+        }
+      }
+    };
+
+    // --- MODULE: PAGE MANAGER ---
+    const PageManager = {
+      savePage() {
+        AppState.pages[AppState.currentPageIndex] = DOM.canvas.toDataURL('image/png');
+      },
+
+      loadPage(index) {
+        const rect = DOM.wrapper.getBoundingClientRect();
+        const template = AppState.pageTemplates[index] || 'ruled';
+
+        TemplateEngine.drawBackground(DOM.bgCtx, rect.width, rect.height, template);
+        DOM.ctx.clearRect(0, 0, rect.width, rect.height);
+
+        if (AppState.pages[index]) {
+          const img = new Image();
+          img.src = AppState.pages[index];
+          img.onload = () => {
+            DOM.ctx.drawImage(img, 0, 0, rect.width, rect.height);
+          };
+        }
+        HistoryManager.updateButtons();
+      },
+
+      updateUI() {
+        DOM.pageIndicator.textContent = `${AppState.currentPageIndex + 1} / ${AppState.pages.length}`;
+        DOM.prevPageBtn.disabled = AppState.currentPageIndex === 0;
+        DOM.nextPageBtn.disabled = AppState.currentPageIndex === AppState.pages.length - 1;
+        HistoryManager.updateButtons();
+      },
+
+      createNewPage() {
+        this.savePage();
+        const currentStyle = AppState.pageTemplates[AppState.currentPageIndex] || 'ruled';
+        AppState.pages.push('');
+        AppState.pageTemplates.push(currentStyle);
+        AppState.currentPageIndex = AppState.pages.length - 1;
+
+        const rect = DOM.wrapper.getBoundingClientRect();
+        TemplateEngine.drawBackground(DOM.bgCtx, rect.width, rect.height, currentStyle);
+        DOM.ctx.clearRect(0, 0, rect.width, rect.height);
+        this.savePage();
+        this.updateUI();
+      },
+
+      setPageTemplate(template) {
+        AppState.pageTemplates[AppState.currentPageIndex] = template;
+        const rect = DOM.wrapper.getBoundingClientRect();
+        TemplateEngine.drawBackground(DOM.bgCtx, rect.width, rect.height, template);
+      }
+    };
+
+    // --- MODULE: CURSOR PREVIEW ---
+    const CursorController = {
+      updateCursor(e) {
+        const rect = DOM.wrapper.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        if (x < 0 || y < 0 || x > rect.width || y > rect.height) {
+          DOM.toolCursor.style.display = 'none';
+          return;
+        }
+
+        DOM.toolCursor.style.display = 'block';
+        DOM.toolCursor.style.left = `${x}px`;
+        DOM.toolCursor.style.top = `${y}px`;
+
+        if (AppState.currentTool === 'eraser') {
+          const size = AppState.baseSize * 4;
+          DOM.toolCursor.style.width = `${size}px`;
+          DOM.toolCursor.style.height = `${size}px`;
+          DOM.toolCursor.style.border = '1.5px solid rgba(255, 255, 255, 0.8)';
+          DOM.toolCursor.style.backgroundColor = 'rgba(255, 255, 255, 0.15)';
+        } else if (AppState.currentTool === 'highlighter') {
+          const size = AppState.baseSize * 3;
+          DOM.toolCursor.style.width = `${size}px`;
+          DOM.toolCursor.style.height = `${size}px`;
+          DOM.toolCursor.style.border = '1px solid rgba(255, 255, 255, 0.6)';
+          DOM.toolCursor.style.backgroundColor = AppState.currentColor;
+          DOM.toolCursor.style.opacity = AppState.opacity;
+        } else {
+          const size = Math.max(AppState.baseSize, 4);
+          DOM.toolCursor.style.width = `${size}px`;
+          DOM.toolCursor.style.height = `${size}px`;
+          DOM.toolCursor.style.border = '1px solid rgba(0, 0, 0, 0.5)';
+          DOM.toolCursor.style.backgroundColor = AppState.currentColor;
+          DOM.toolCursor.style.opacity = '1';
+        }
+      },
+
+      hideCursor() {
+        DOM.toolCursor.style.display = 'none';
+      }
+    };
+
+    // --- MODULE: DRAWING LOGIC ---
+    const DrawingEngine = {
+      init() {
+        DOM.canvas.addEventListener('pointerdown', (e) => { if (e.button === 0) DrawingEngine.start(e); });
+        DOM.canvas.addEventListener('pointermove', (e) => {
+          CursorController.updateCursor(e);
+          DrawingEngine.draw(e);
+        });
+        DOM.canvas.addEventListener('pointerup', () => DrawingEngine.stop());
+        DOM.canvas.addEventListener('pointerleave', () => {
+          CursorController.hideCursor();
+          DrawingEngine.stop();
+        });
+        DOM.canvas.addEventListener('pointercancel', () => {
+          CursorController.hideCursor();
+          DrawingEngine.stop();
+        });
+      },
+
+      getCoords(e) {
+        const rect = DOM.canvas.getBoundingClientRect();
+        return {
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top
+        };
+      },
+
+      start(e) {
+        if (e.pointerType === 'touch') return;
+
+        HistoryManager.saveState();
+
+        AppState.isDrawing = true;
+        const coords = this.getCoords(e);
+        AppState.startX = coords.x;
+        AppState.startY = coords.y;
+        AppState.lastX = coords.x;
+        AppState.lastY = coords.y;
+
+        DOM.toolPopover.classList.add('hidden');
+        DOM.optionsMenu.classList.add('hidden');
+
+        const rect = DOM.wrapper.getBoundingClientRect();
+
+        if (AppState.currentTool === 'highlighter') {
+          AppState.strokeCtx.clearRect(0, 0, rect.width, rect.height);
+          AppState.strokeCtx.lineCap = 'round';
+          AppState.strokeCtx.lineJoin = 'round';
+          AppState.strokeCtx.strokeStyle = AppState.currentColor;
+          AppState.strokeCtx.lineWidth = AppState.baseSize * 3;
+          AppState.strokeCtx.beginPath();
+          AppState.strokeCtx.moveTo(coords.x, coords.y);
+        } else if (AppState.currentTool === 'linePen') {
+          DOM.previewCtx.clearRect(0, 0, rect.width, rect.height);
+        } else {
+          DOM.ctx.beginPath();
+          DOM.ctx.moveTo(AppState.lastX, AppState.lastY);
+        }
+      },
+
+      draw(e) {
+        if (!AppState.isDrawing || e.pointerType === 'touch') return;
+
+        const coords = this.getCoords(e);
+        const currentX = coords.x;
+        const currentY = coords.y;
+
+        let pressure = e.pressure;
+        if (!AppState.usePressure || pressure === 0 || pressure === undefined) {
+          pressure = 0.5;
+        }
+
+        const tool = AppState.currentTool;
+        const rect = DOM.wrapper.getBoundingClientRect();
+
+        if (tool === 'linePen') {
+          DOM.previewCtx.clearRect(0, 0, rect.width, rect.height);
+          DOM.previewCtx.lineCap = 'round';
+          DOM.previewCtx.strokeStyle = AppState.currentColor;
+          DOM.previewCtx.lineWidth = AppState.baseSize;
+          DOM.previewCtx.beginPath();
+          DOM.previewCtx.moveTo(AppState.startX, AppState.startY);
+          DOM.previewCtx.lineTo(currentX, currentY);
+          DOM.previewCtx.stroke();
+
+        } else if (tool === 'highlighter') {
+          AppState.strokeCtx.lineTo(currentX, currentY);
+          AppState.strokeCtx.stroke();
+
+        } else {
+          DOM.ctx.lineCap = 'round';
+          DOM.ctx.lineJoin = 'round';
+          DOM.ctx.globalAlpha = 1.0;
+
+          if (tool === 'pen') {
+            DOM.ctx.globalCompositeOperation = 'source-over';
+            DOM.ctx.strokeStyle = AppState.currentColor;
+            DOM.ctx.lineWidth = AppState.baseSize * (pressure * 2);
+          } else if (tool === 'pencil') {
+            DOM.ctx.globalCompositeOperation = 'source-over';
+            DOM.ctx.strokeStyle = AppState.currentColor;
+            DOM.ctx.lineWidth = AppState.baseSize * (pressure * 1.2);
+            DOM.ctx.globalAlpha = 0.7;
+          } else if (tool === 'eraser') {
+            DOM.ctx.globalCompositeOperation = 'destination-out';
+            DOM.ctx.lineWidth = AppState.baseSize * 4;
+          }
+
+          DOM.ctx.beginPath();
+          DOM.ctx.moveTo(AppState.lastX, AppState.lastY);
+          DOM.ctx.lineTo(currentX, currentY);
+          DOM.ctx.stroke();
+        }
+
+        AppState.lastX = currentX;
+        AppState.lastY = currentY;
+      },
+
+      stop() {
+        if (!AppState.isDrawing) return;
+        AppState.isDrawing = false;
+
+        const tool = AppState.currentTool;
+        const rect = DOM.wrapper.getBoundingClientRect();
+
+        if (tool === 'linePen') {
+          DOM.previewCtx.clearRect(0, 0, rect.width, rect.height);
+          DOM.ctx.lineCap = 'round';
+          DOM.ctx.globalCompositeOperation = 'source-over';
+          DOM.ctx.globalAlpha = 1.0;
+          DOM.ctx.strokeStyle = AppState.currentColor;
+          DOM.ctx.lineWidth = AppState.baseSize;
+          DOM.ctx.beginPath();
+          DOM.ctx.moveTo(AppState.startX, AppState.startY);
+          DOM.ctx.lineTo(AppState.lastX, AppState.lastY);
+          DOM.ctx.stroke();
+
+        } else if (tool === 'highlighter') {
+          DOM.ctx.save();
+          DOM.ctx.globalCompositeOperation = 'source-over';
+          DOM.ctx.globalAlpha = AppState.opacity;
+          DOM.ctx.drawImage(AppState.strokeCanvas, 0, 0, rect.width, rect.height);
+          DOM.ctx.restore();
+        }
+
+        DOM.ctx.globalAlpha = 1.0;
+        DOM.ctx.globalCompositeOperation = 'source-over';
+        PageManager.savePage();
+      }
+    };
+
+    // --- MODULE: UI INTERACTION CONTROLLER ---
+    const UIController = {
+      init() {
+        lucide.createIcons();
+
+        // Menu Toggles
+        DOM.menuToggleBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          DOM.optionsMenu.classList.toggle('hidden');
+        });
+
+        document.addEventListener('click', (e) => {
+          if (!DOM.optionsMenu.contains(e.target) && !DOM.menuToggleBtn.contains(e.target)) {
+            DOM.optionsMenu.classList.add('hidden');
+          }
+        });
+
+        // Tool Selection
+        DOM.toolBtns.forEach(btn => {
+          btn.addEventListener('click', () => {
+            const selectedTool = btn.dataset.tool;
+
+            if (AppState.currentTool === selectedTool) {
+              DOM.toolPopover.classList.toggle('hidden');
+              DOM.toolPopover.classList.toggle('flex');
+            } else {
+              AppState.currentTool = selectedTool;
+              DOM.toolPopover.classList.add('hidden');
+              DOM.toolPopover.classList.remove('flex');
+
+              DOM.toolBtns.forEach(b => {
+                b.classList.remove('text-blue-400', 'bg-white/10');
+                b.classList.add('text-gray-400');
+                const indicator = b.querySelector('span');
+                if (indicator) indicator.remove();
+              });
+
+              btn.classList.add('text-blue-400', 'bg-white/10');
+              btn.classList.remove('text-gray-400');
+              btn.innerHTML += `<span class="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-blue-400 rounded-full"></span>`;
+            }
+          });
+        });
+
+        // Undo & Redo Handlers
+        DOM.undoBtn.addEventListener('click', () => HistoryManager.undo());
+        DOM.redoBtn.addEventListener('click', () => HistoryManager.redo());
+
+        // Color Controls
+        DOM.colorPresets.forEach(preset => {
+          preset.addEventListener('click', () => {
+            AppState.currentColor = preset.dataset.color;
+            DOM.colorPresets.forEach(p => p.classList.remove('ring-2', 'ring-white'));
+            preset.classList.add('ring-2', 'ring-white');
+          });
+        });
+
+        DOM.colorPicker.addEventListener('input', (e) => {
+          AppState.currentColor = e.target.value;
+          DOM.colorPresets.forEach(p => p.classList.remove('ring-2', 'ring-white'));
+        });
+
+        // Size Slider
+        DOM.sizeSlider.addEventListener('input', (e) => {
+          AppState.baseSize = parseFloat(e.target.value);
+          DOM.sizeVal.textContent = `${AppState.baseSize}px`;
+        });
+
+        // Opacity Slider
+        DOM.opacitySlider.addEventListener('input', (e) => {
+          AppState.opacity = parseFloat(e.target.value);
+          DOM.opacityVal.textContent = `${Math.round(AppState.opacity * 100)}%`;
+        });
+
+        // Pressure Sensitivity
+        DOM.pressureToggle.addEventListener('change', (e) => {
+          AppState.usePressure = e.target.checked;
+        });
+
+        // Background Template Selection
+        document.querySelectorAll('.template-option').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            const template = e.currentTarget.dataset.template;
+            PageManager.setPageTemplate(template);
+            DOM.optionsMenu.classList.add('hidden');
+          });
+        });
+
+        // Page Controls
+        DOM.prevPageBtn.addEventListener('click', () => {
+          if (AppState.currentPageIndex > 0) {
+            PageManager.savePage();
+            AppState.currentPageIndex--;
+            PageManager.loadPage(AppState.currentPageIndex);
+            PageManager.updateUI();
+          }
+        });
+
+        DOM.nextPageBtn.addEventListener('click', () => {
+          if (AppState.currentPageIndex < AppState.pages.length - 1) {
+            PageManager.savePage();
+            AppState.currentPageIndex++;
+            PageManager.loadPage(AppState.currentPageIndex);
+            PageManager.updateUI();
+          }
+        });
+
+        DOM.newPageBtn.addEventListener('click', () => {
+          PageManager.createNewPage();
+        });
+
+        // Clear Page Dropdown Action
+        DOM.clearBtn.addEventListener('click', () => {
+          DOM.optionsMenu.classList.add('hidden');
+          if (confirm('Clear current page?')) {
+            HistoryManager.saveState();
+            const rect = DOM.wrapper.getBoundingClientRect();
+            DOM.ctx.clearRect(0, 0, rect.width, rect.height);
+            PageManager.savePage();
+          }
+        });
+
+        // Exports
+        DOM.exportImgBtn.addEventListener('click', () => UIController.exportPNG());
+        DOM.exportPdfBtn.addEventListener('click', () => UIController.exportPDF());
+      },
+
+      exportPNG() {
+        PageManager.savePage();
+        const exportCanvas = document.createElement('canvas');
+        exportCanvas.width = DOM.canvas.width;
+        exportCanvas.height = DOM.canvas.height;
+        const expCtx = exportCanvas.getContext('2d');
+
+        const rect = DOM.wrapper.getBoundingClientRect();
+        TemplateEngine.drawBackground(expCtx, rect.width, rect.height, AppState.pageTemplates[AppState.currentPageIndex]);
+        expCtx.drawImage(DOM.canvas, 0, 0);
+
+        const link = document.createElement('a');
+        link.download = `notes-page-${AppState.currentPageIndex + 1}.png`;
+        link.href = exportCanvas.toDataURL('image/png');
+        link.click();
+      },
+
+     async exportPDF() {
+  PageManager.savePage();
+  const { jsPDF } = window.jspdf;
+  let pdf = null;
+
+  for (let i = 0; i < AppState.pages.length; i++) {
+    const tempCanvas = document.createElement('canvas');
+    // Set actual canvas pixel dimensions (accounts for devicePixelRatio)
+    tempCanvas.width = DOM.canvas.width;
+    tempCanvas.height = DOM.canvas.height;
+    const tempCtx = tempCanvas.getContext('2d');
+
+    // Draw background using actual backing pixel dimensions
+    TemplateEngine.drawBackground(tempCtx, tempCanvas.width, tempCanvas.height, AppState.pageTemplates[i] || 'ruled');
+
+    if (AppState.pages[i]) {
+      const img = new Image();
+      img.src = AppState.pages[i];
+      await new Promise(resolve => {
+        img.onload = () => {
+          tempCtx.drawImage(img, 0, 0, tempCanvas.width, tempCanvas.height);
+          resolve();
+        };
+      });
+    }
+
+    const imgData = tempCanvas.toDataURL('image/jpeg', 0.98);
+
+    // Dynamic page size matching the exact dimensions of the image canvas
+    const imgWidth = tempCanvas.width;
+    const imgHeight = tempCanvas.height;
+    const orientation = imgWidth > imgHeight ? 'l' : 'p';
+
+    if (i === 0) {
+      pdf = new jsPDF({
+        orientation: orientation,
+        unit: 'px',
+        format: [imgWidth, imgHeight],
+        compress: true
+      });
+    } else {
+      pdf.addPage([imgWidth, imgHeight], orientation);
+    }
+
+    // Stretch image to 100% of PDF page boundaries without margin
+    pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight, undefined, 'FAST');
+  }
+
+  if (pdf) pdf.save('my-notes.pdf');
+}
+    };
+
+    // --- APP INITIALIZATION ---
+    window.addEventListener('load', () => {
+      AppState.pages.push('');
+      AppState.pageTemplates.push('ruled');
+
+      CanvasEngine.init();
+      DrawingEngine.init();
+      UIController.init();
+      PageManager.updateUI();
     });
   </script>
 </body>
