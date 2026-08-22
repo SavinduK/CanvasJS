@@ -2,20 +2,36 @@
 window.DrawingEngine = {
   init() {
     if (!window.DOM.canvas) return;
-    window.DOM.canvas.addEventListener('pointerdown', (e) => { if (e.button === 0) window.DrawingEngine.start(e); });
+
+    window.DOM.canvas.addEventListener('pointerdown', (e) => {
+      if (e.button === 0) window.DrawingEngine.start(e);
+    });
+
     window.DOM.canvas.addEventListener('pointermove', (e) => {
       window.CursorController.updateCursor(e);
       window.DrawingEngine.draw(e);
     });
-    window.DOM.canvas.addEventListener('pointerup', () => window.DrawingEngine.stop());
+
+    window.DOM.canvas.addEventListener('pointerup', (e) => window.DrawingEngine.stop(e));
     window.DOM.canvas.addEventListener('pointerleave', () => {
       window.CursorController.hideCursor();
       window.DrawingEngine.stop();
     });
-    window.DOM.canvas.addEventListener('pointercancel', () => {
+    window.DOM.canvas.addEventListener('pointercancel', (e) => {
       window.CursorController.hideCursor();
-      window.DrawingEngine.stop();
+      window.DrawingEngine.stop(e);
     });
+
+    // Touch Event Interceptors: Prevent default touch scrolling / palm gesture scrolling on canvas
+    const blockTouchScroll = (e) => {
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+    };
+    window.DOM.canvas.addEventListener('touchstart', blockTouchScroll, { passive: false });
+    window.DOM.canvas.addEventListener('touchmove', blockTouchScroll, { passive: false });
+    window.DOM.canvas.addEventListener('touchend', blockTouchScroll, { passive: false });
+    window.DOM.canvas.addEventListener('touchcancel', blockTouchScroll, { passive: false });
   },
 
   getCoords(e) {
@@ -28,7 +44,20 @@ window.DrawingEngine = {
 
   start(e) {
     if (window.AppState.currentTool === 'select' || !window.DOM.wrapper || !window.DOM.ctx) return;
-    if (!window.AppState.touchDrawing && e.pointerType === 'touch') return;
+
+    // Prevent default gesture / scrolling behavior
+    if (e.cancelable) e.preventDefault();
+
+    // If Draw with Hand is OFF and the input is a touch/finger/palm, block drawing and capture event
+    if (!window.AppState.touchDrawing && e.pointerType === 'touch') {
+      return;
+    }
+
+    try {
+      if (window.DOM.canvas && window.DOM.canvas.setPointerCapture && e.pointerId) {
+        window.DOM.canvas.setPointerCapture(e.pointerId);
+      }
+    } catch (err) {}
 
     const rect = window.DOM.wrapper.getBoundingClientRect();
     const coords = this.getCoords(e);
@@ -50,7 +79,10 @@ window.DrawingEngine = {
     window.AppState.lastY = coords.y;
 
     if (window.DOM.toolPopover) window.DOM.toolPopover.classList.add('hidden');
-    if (window.DOM.optionsMenu) window.DOM.optionsMenu.classList.add('hidden');
+    // Close any open header dropdown menus on drawing start
+    if (window.UIController && window.UIController.closeAllHeaderMenus) {
+      window.UIController.closeAllHeaderMenus();
+    }
 
     if (window.AppState.currentTool === 'highlighter') {
       window.AppState.strokeCtx.clearRect(0, 0, rect.width, rect.height);
@@ -78,6 +110,8 @@ window.DrawingEngine = {
 
   draw(e) {
     if (!window.AppState.isDrawing || window.AppState.currentTool === 'select' || !window.DOM.wrapper || !window.DOM.ctx) return;
+    if (e.cancelable) e.preventDefault();
+
     if (!window.AppState.touchDrawing && e.pointerType === 'touch') return;
 
     const coords = this.getCoords(e);
@@ -98,7 +132,7 @@ window.DrawingEngine = {
       window.DOM.previewCtx.clearRect(0, 0, rect.width, rect.height);
       window.DOM.previewCtx.save();
       if (currentTemplate === 'flashcard') {
-        window.FlashcardEngine.setClipRegion(window.DOM.previewCtx, rect.width, rect.height);
+        FlashcardEngine.setClipRegion(window.DOM.previewCtx, rect.width, rect.height);
       }
       window.DOM.previewCtx.lineCap = 'round';
       window.DOM.previewCtx.strokeStyle = window.AppState.currentColor;
@@ -138,7 +172,13 @@ window.DrawingEngine = {
     window.AppState.lastY = currentY;
   },
 
-  stop() {
+  stop(e) {
+    if (e && e.pointerId && window.DOM.canvas && window.DOM.canvas.hasPointerCapture && window.DOM.canvas.hasPointerCapture(e.pointerId)) {
+      try {
+        window.DOM.canvas.releasePointerCapture(e.pointerId);
+      } catch (err) {}
+    }
+
     if (!window.AppState.isDrawing || !window.DOM.wrapper || !window.DOM.ctx) return;
     window.AppState.isDrawing = false;
 

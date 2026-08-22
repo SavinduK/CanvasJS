@@ -45,21 +45,17 @@
       </div>
     </div>
 
-    <!-- Right: Header Controls & Dropdown Menu -->
-    <div class="flex items-center gap-2">
+    <!-- Right: Header Controls & Separate Category Dropdown Menus -->
+    <div class="flex items-center gap-1 sm:gap-2">
       <input type="file" id="imageFileInput" accept="image/*" class="hidden">
       <input type="file" id="pdfFileInput" accept="application/pdf" class="hidden">
 
-      <!-- Settings / Options Menu -->
-      <div class="relative">
-        <button id="menuToggleBtn" class="p-2 rounded-lg hover:bg-white/5 text-gray-300 transition">
-          <i data-lucide="more-vertical" class="w-5 h-5"></i>
+      <!-- 1. Actions Dropdown -->
+      <div class="relative header-dropdown">
+        <button id="actionsMenuBtn" class="p-2 rounded-lg hover:bg-white/5 text-gray-300 transition" title="Actions">
+          <i data-lucide="plus-circle" class="w-5 h-5"></i>
         </button>
-
-        <!-- Dropdown Menu -->
-        <div id="optionsMenu" class="hidden absolute right-0 mt-2 w-56 bg-[#242427] border border-white/10 rounded-xl shadow-2xl py-2 z-50 text-sm">
-          
-          <!-- Page Actions -->
+        <div id="actionsMenu" class="hidden absolute right-0 mt-2 w-56 bg-[#242427] border border-white/10 rounded-xl shadow-2xl py-2 z-50 text-sm">
           <div class="px-3 py-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Actions</div>
           <button id="importPdfBtn" class="w-full px-3 py-2 text-left hover:bg-white/5 flex items-center gap-2 text-gray-200 transition">
             <i data-lucide="file-up" class="w-4 h-4 text-rose-400"></i> Import PDF Document
@@ -68,15 +64,20 @@
             <i data-lucide="image-plus" class="w-4 h-4 text-blue-400"></i> Add Image
           </button>
           <button id="clearBtn" class="w-full px-3 py-2 text-left hover:bg-white/5 text-amber-400 flex items-center gap-2 transition">
-            <i data-lucide="eraser" class="w-4 h-4 text-amber-400"></i> Clear Current Page Drawing
+            <i data-lucide="eraser" class="w-4 h-4 text-amber-400"></i> Clear Page Drawing
           </button>
           <button id="deletePageMenuBtn" class="w-full px-3 py-2 text-left hover:bg-red-500/10 text-red-400 flex items-center gap-2 transition">
             <i data-lucide="trash-2" class="w-4 h-4 text-red-400"></i> Delete Current Page
           </button>
+        </div>
+      </div>
 
-          <div class="h-px bg-white/10 my-2"></div>
-
-          <!-- Background Pattern Options -->
+      <!-- 2. Page Templates Dropdown -->
+      <div class="relative header-dropdown">
+        <button id="templateMenuBtn" class="p-2 rounded-lg hover:bg-white/5 text-gray-300 transition" title="Page Templates">
+          <i data-lucide="layout-template" class="w-5 h-5"></i>
+        </button>
+        <div id="templateMenu" class="hidden absolute right-0 mt-2 w-56 bg-[#242427] border border-white/10 rounded-xl shadow-2xl py-2 z-50 text-sm">
           <div class="px-3 py-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Page Template</div>
           <button class="template-option w-full px-3 py-2 text-left hover:bg-white/5 flex items-center gap-2 text-gray-200" data-template="ruled">
             <i data-lucide="align-justify" class="w-4 h-4 text-blue-400"></i> Ruled Lines
@@ -90,10 +91,15 @@
           <button class="template-option w-full px-3 py-2 text-left hover:bg-white/5 flex items-center gap-2 text-gray-200" data-template="blank">
             <i data-lucide="square" class="w-4 h-4 text-gray-400"></i> Blank Page
           </button>
+        </div>
+      </div>
 
-          <div class="h-px bg-white/10 my-2"></div>
-
-          <!-- Settings -->
+      <!-- 3. Settings Dropdown -->
+      <div class="relative header-dropdown">
+        <button id="settingsMenuBtn" class="p-2 rounded-lg hover:bg-white/5 text-gray-300 transition" title="Settings">
+          <i data-lucide="sliders-horizontal" class="w-5 h-5"></i>
+        </button>
+        <div id="settingsMenu" class="hidden absolute right-0 mt-2 w-64 bg-[#242427] border border-white/10 rounded-xl shadow-2xl py-2 z-50 text-sm">
           <div class="px-3 py-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Settings</div>
           <label class="px-3 py-2 hover:bg-white/5 flex items-center justify-between cursor-pointer text-gray-200">
             <span class="flex items-center gap-2"><i data-lucide="maximize-2" class="w-4 h-4 text-cyan-400"></i> Fit to Screen Mode</span>
@@ -107,10 +113,15 @@
             <span class="flex items-center gap-2"><i data-lucide="sparkles" class="w-4 h-4 text-amber-400"></i> Pressure Sensitivity</span>
             <input type="checkbox" id="pressureToggle" checked class="rounded border-gray-600 text-blue-500 focus:ring-0">
           </label>
+        </div>
+      </div>
 
-          <div class="h-px bg-white/10 my-2"></div>
-
-          <!-- Exports -->
+      <!-- 4. Export Dropdown -->
+      <div class="relative header-dropdown">
+        <button id="exportMenuBtn" class="p-2 rounded-lg hover:bg-white/5 text-gray-300 transition" title="Export">
+          <i data-lucide="download" class="w-5 h-5"></i>
+        </button>
+        <div id="exportMenu" class="hidden absolute right-0 mt-2 w-56 bg-[#242427] border border-white/10 rounded-xl shadow-2xl py-2 z-50 text-sm">
           <div class="px-3 py-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Export</div>
           <button id="exportImgBtn" class="w-full px-3 py-2 text-left hover:bg-white/5 flex items-center gap-2 text-gray-200">
             <i data-lucide="image" class="w-4 h-4 text-indigo-400"></i> Export PNG
@@ -118,9 +129,9 @@
           <button id="exportPdfBtn" class="w-full px-3 py-2 text-left hover:bg-white/5 flex items-center gap-2 text-gray-200">
             <i data-lucide="file-text" class="w-4 h-4 text-rose-400"></i> Export PDF (Fit Canvas)
           </button>
-
         </div>
       </div>
+
     </div>
   </header>
 

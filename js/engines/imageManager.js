@@ -3,7 +3,7 @@ window.ImageManager = {
   init() {
     if (window.DOM.importImgBtn) {
       window.DOM.importImgBtn.addEventListener('click', () => {
-        if (window.DOM.optionsMenu) window.DOM.optionsMenu.classList.add('hidden');
+        if (window.UIController && window.UIController.closeAllHeaderMenus) window.UIController.closeAllHeaderMenus();
         if (window.DOM.imageFileInput) window.DOM.imageFileInput.click();
       });
     }

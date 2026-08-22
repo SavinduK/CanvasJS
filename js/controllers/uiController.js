@@ -1,25 +1,52 @@
 // --- MODULE: UI INTERACTION CONTROLLER ---
 window.UIController = {
+  closeAllHeaderMenus() {
+    [
+      window.DOM.actionsMenu,
+      window.DOM.templateMenu,
+      window.DOM.settingsMenu,
+      window.DOM.exportMenu
+    ].forEach(menu => {
+      if (menu) menu.classList.add('hidden');
+    });
+  },
+
+  toggleHeaderMenu(targetMenu) {
+    if (!targetMenu) return;
+    const isCurrentlyHidden = targetMenu.classList.contains('hidden');
+    this.closeAllHeaderMenus();
+    if (isCurrentlyHidden) {
+      targetMenu.classList.remove('hidden');
+    }
+  },
+
   init() {
     if (window.lucide) {
       lucide.createIcons();
     }
 
-    if (window.DOM.menuToggleBtn) {
-      window.DOM.menuToggleBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (window.DOM.optionsMenu) window.DOM.optionsMenu.classList.toggle('hidden');
-      });
-    }
+    // Setup Header Dropdown Toggles
+    const setupMenuToggle = (btn, menu) => {
+      if (btn && menu) {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          UIController.toggleHeaderMenu(menu);
+        });
+      }
+    };
+
+    setupMenuToggle(window.DOM.actionsMenuBtn, window.DOM.actionsMenu);
+    setupMenuToggle(window.DOM.templateMenuBtn, window.DOM.templateMenu);
+    setupMenuToggle(window.DOM.settingsMenuBtn, window.DOM.settingsMenu);
+    setupMenuToggle(window.DOM.exportMenuBtn, window.DOM.exportMenu);
 
     document.addEventListener('click', (e) => {
-      if (window.DOM.optionsMenu && window.DOM.menuToggleBtn) {
-        if (!window.DOM.optionsMenu.contains(e.target) && !window.DOM.menuToggleBtn.contains(e.target)) {
-          window.DOM.optionsMenu.classList.add('hidden');
-        }
+      if (!e.target.closest('.header-dropdown')) {
+        UIController.closeAllHeaderMenus();
       }
     });
 
+    // Tool Selection
     if (window.DOM.toolBtns) {
       window.DOM.toolBtns.forEach(btn => {
         btn.addEventListener('click', () => {
@@ -37,9 +64,11 @@ window.UIController = {
       });
     }
 
+    // Undo & Redo Handlers
     if (window.DOM.undoBtn) window.DOM.undoBtn.addEventListener('click', () => window.HistoryManager.undo());
     if (window.DOM.redoBtn) window.DOM.redoBtn.addEventListener('click', () => window.HistoryManager.redo());
 
+    // Color Controls
     if (window.DOM.colorPresets) {
       window.DOM.colorPresets.forEach(preset => {
         preset.addEventListener('click', () => {
@@ -59,6 +88,7 @@ window.UIController = {
       });
     }
 
+    // Size Slider
     if (window.DOM.sizeSlider) {
       window.DOM.sizeSlider.addEventListener('input', (e) => {
         window.AppState.baseSize = parseFloat(e.target.value);
@@ -66,6 +96,7 @@ window.UIController = {
       });
     }
 
+    // Opacity Slider
     if (window.DOM.opacitySlider) {
       window.DOM.opacitySlider.addEventListener('input', (e) => {
         window.AppState.opacity = parseFloat(e.target.value);
@@ -73,18 +104,21 @@ window.UIController = {
       });
     }
 
+    // Pressure Sensitivity Toggle
     if (window.DOM.pressureToggle) {
       window.DOM.pressureToggle.addEventListener('change', (e) => {
         window.AppState.usePressure = e.target.checked;
       });
     }
 
+    // Touch Drawing Toggle
     if (window.DOM.touchDrawingToggle) {
       window.DOM.touchDrawingToggle.addEventListener('change', (e) => {
         window.AppState.touchDrawing = e.target.checked;
       });
     }
 
+    // Fit to Screen Toggle
     if (window.DOM.fitToScreenToggle) {
       window.DOM.fitToScreenToggle.addEventListener('change', (e) => {
         window.AppState.fitToScreen = e.target.checked;
@@ -92,14 +126,16 @@ window.UIController = {
       });
     }
 
+    // Template Selector
     document.querySelectorAll('.template-option').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const template = e.currentTarget.dataset.template;
         window.PageManager.setPageTemplate(template);
-        if (window.DOM.optionsMenu) window.DOM.optionsMenu.classList.add('hidden');
+        UIController.closeAllHeaderMenus();
       });
     });
 
+    // Page Navigation
     if (window.DOM.prevPageBtn) {
       window.DOM.prevPageBtn.addEventListener('click', () => {
         if (window.AppState.currentPageIndex > 0) {
@@ -136,14 +172,15 @@ window.UIController = {
 
     if (window.DOM.deletePageMenuBtn) {
       window.DOM.deletePageMenuBtn.addEventListener('click', () => {
-        if (window.DOM.optionsMenu) window.DOM.optionsMenu.classList.add('hidden');
+        UIController.closeAllHeaderMenus();
         window.PageManager.deleteCurrentPage();
       });
     }
 
+    // Clear Page
     if (window.DOM.clearBtn) {
       window.DOM.clearBtn.addEventListener('click', () => {
-        if (window.DOM.optionsMenu) window.DOM.optionsMenu.classList.add('hidden');
+        UIController.closeAllHeaderMenus();
         if (confirm('Clear current page drawing?')) {
           window.HistoryManager.saveState();
           const rect = window.DOM.wrapper.getBoundingClientRect();
@@ -155,8 +192,20 @@ window.UIController = {
       });
     }
 
-    if (window.DOM.exportImgBtn) window.DOM.exportImgBtn.addEventListener('click', () => window.UIController.exportPNG());
-    if (window.DOM.exportPdfBtn) window.DOM.exportPdfBtn.addEventListener('click', () => window.UIController.exportPDF());
+    // Exports
+    if (window.DOM.exportImgBtn) {
+      window.DOM.exportImgBtn.addEventListener('click', () => {
+        UIController.closeAllHeaderMenus();
+        window.UIController.exportPNG();
+      });
+    }
+
+    if (window.DOM.exportPdfBtn) {
+      window.DOM.exportPdfBtn.addEventListener('click', () => {
+        UIController.closeAllHeaderMenus();
+        window.UIController.exportPDF();
+      });
+    }
   },
 
   setTool(selectedTool) {

@@ -7,7 +7,7 @@ window.PdfEngine = {
 
     if (window.DOM.importPdfBtn) {
       window.DOM.importPdfBtn.addEventListener('click', () => {
-        if (window.DOM.optionsMenu) window.DOM.optionsMenu.classList.add('hidden');
+        if (window.UIController && window.UIController.closeAllHeaderMenus) window.UIController.closeAllHeaderMenus();
         if (window.DOM.pdfFileInput) window.DOM.pdfFileInput.click();
       });
     }
