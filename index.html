@@ -10,6 +10,8 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- jsPDF for exporting multi-page PDFs -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- PDF.js for importing & rendering PDFs -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
   <style>
     /* Global Lock */
@@ -158,6 +160,7 @@
     <!-- Right: Header Controls & Dropdown Menu -->
     <div class="flex items-center gap-2">
       <input type="file" id="imageFileInput" accept="image/*" class="hidden">
+      <input type="file" id="pdfFileInput" accept="application/pdf" class="hidden">
 
       <!-- Settings / Options Menu -->
       <div class="relative">
@@ -170,6 +173,9 @@
           
           <!-- Page Actions -->
           <div class="px-3 py-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Actions</div>
+          <button id="importPdfBtn" class="w-full px-3 py-2 text-left hover:bg-white/5 flex items-center gap-2 text-gray-200 transition">
+            <i data-lucide="file-up" class="w-4 h-4 text-rose-400"></i> Import PDF Document
+          </button>
           <button id="importImgBtn" class="w-full px-3 py-2 text-left hover:bg-white/5 flex items-center gap-2 text-gray-200 transition">
             <i data-lucide="image-plus" class="w-4 h-4 text-blue-400"></i> Add Image
           </button>
@@ -335,6 +341,7 @@
       pages: [],
       pageTemplates: [],
       pageImages: [], // Array of arrays containing image objects per page
+      pagePdfBackgrounds: [], // Array containing PDF page background image Data URLs per page
       currentPageIndex: 0,
       
       currentTool: 'pen',
@@ -381,6 +388,8 @@
       exportPdfBtn: document.getElementById('exportPdfBtn'),
       importImgBtn: document.getElementById('importImgBtn'),
       imageFileInput: document.getElementById('imageFileInput'),
+      importPdfBtn: document.getElementById('importPdfBtn'),
+      pdfFileInput: document.getElementById('pdfFileInput'),
 
       // Floating Dock Tools
       toolBtns: document.querySelectorAll('.tool-btn'),
@@ -426,11 +435,27 @@
 
     // --- MODULE: BACKGROUND TEMPLATES ---
     const TemplateEngine = {
-      drawBackground(ctx, width, height, template) {
+      drawBackground(ctx, width, height, template, pageIndex = AppState.currentPageIndex) {
         ctx.save();
         ctx.clearRect(0, 0, width, height);
 
-        if (template === 'flashcard') {
+        if (template === 'pdf') {
+          ctx.fillStyle = '#1e1e20';
+          ctx.fillRect(0, 0, width, height);
+
+          const pdfImgSrc = AppState.pagePdfBackgrounds[pageIndex];
+          if (pdfImgSrc) {
+            const img = new Image();
+            img.src = pdfImgSrc;
+            if (img.complete) {
+              ctx.drawImage(img, 0, 0, width, height);
+            } else {
+              img.onload = () => {
+                ctx.drawImage(img, 0, 0, width, height);
+              };
+            }
+          }
+        } else if (template === 'flashcard') {
           ctx.fillStyle = '#121212';
           ctx.fillRect(0, 0, width, height);
 
@@ -491,6 +516,38 @@
               ctx.stroke();
             }
           }
+        }
+
+        ctx.restore();
+      },
+
+      async drawBackgroundAsync(ctx, width, height, template, pageIndex = AppState.currentPageIndex) {
+        ctx.save();
+        ctx.clearRect(0, 0, width, height);
+
+        if (template === 'pdf') {
+          ctx.fillStyle = '#1e1e20';
+          ctx.fillRect(0, 0, width, height);
+
+          const pdfImgSrc = AppState.pagePdfBackgrounds[pageIndex];
+          if (pdfImgSrc) {
+            await new Promise(resolve => {
+              const img = new Image();
+              img.src = pdfImgSrc;
+              if (img.complete) {
+                ctx.drawImage(img, 0, 0, width, height);
+                resolve();
+              } else {
+                img.onload = () => {
+                  ctx.drawImage(img, 0, 0, width, height);
+                  resolve();
+                };
+                img.onerror = () => resolve();
+              }
+            });
+          }
+        } else {
+          this.drawBackground(ctx, width, height, template, pageIndex);
         }
 
         ctx.restore();
@@ -1284,7 +1341,7 @@
         const expCtx = exportCanvas.getContext('2d');
 
         const rect = DOM.wrapper.getBoundingClientRect();
-        TemplateEngine.drawBackground(expCtx, rect.width, rect.height, AppState.pageTemplates[AppState.currentPageIndex]);
+        await TemplateEngine.drawBackgroundAsync(expCtx, rect.width, rect.height, AppState.pageTemplates[AppState.currentPageIndex], AppState.currentPageIndex);
 
         // Draw Images first (so they stay below drawings)
         const currentImages = AppState.pageImages[AppState.currentPageIndex] || [];
@@ -1315,7 +1372,7 @@
           const tempCtx = tempCanvas.getContext('2d');
 
           const rect = DOM.wrapper.getBoundingClientRect();
-          TemplateEngine.drawBackground(tempCtx, tempCanvas.width, tempCanvas.height, AppState.pageTemplates[i] || 'ruled');
+          await TemplateEngine.drawBackgroundAsync(tempCtx, tempCanvas.width, tempCanvas.height, AppState.pageTemplates[i] || 'ruled', i);
 
           // Render Page Images below drawings
           const pageImgList = AppState.pageImages[i] || [];
@@ -1357,15 +1414,93 @@
       }
     };
 
+    // --- MODULE: PDF IMPORT ENGINE ---
+    const PdfEngine = {
+      init() {
+        if (window.pdfjsLib) {
+          pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+
+        DOM.importPdfBtn.addEventListener('click', () => {
+          DOM.optionsMenu.classList.add('hidden');
+          DOM.pdfFileInput.click();
+        });
+
+        DOM.pdfFileInput.addEventListener('change', async (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          await PdfEngine.loadPDF(file);
+          DOM.pdfFileInput.value = '';
+        });
+      },
+
+      async loadPDF(file) {
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+          const pdf = await loadingTask.promise;
+          const numPages = pdf.numPages;
+
+          if (numPages === 0) return;
+
+          // Replace current page if it is single blank untitled page, otherwise append
+          const isFirstPageBlank = (
+            AppState.pages.length === 1 &&
+            !AppState.pages[0] &&
+            (!AppState.pageImages[0] || AppState.pageImages[0].length === 0) &&
+            !AppState.pagePdfBackgrounds[0]
+          );
+
+          const startPageIndex = isFirstPageBlank ? 0 : AppState.pages.length;
+
+          if (isFirstPageBlank) {
+            AppState.pages = [];
+            AppState.pageTemplates = [];
+            AppState.pageImages = [];
+            AppState.pagePdfBackgrounds = [];
+          }
+
+          for (let i = 1; i <= numPages; i++) {
+            const page = await pdf.getPage(i);
+            const viewport = page.getViewport({ scale: 2.0 });
+
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = viewport.width;
+            tempCanvas.height = viewport.height;
+            const tempCtx = tempCanvas.getContext('2d');
+
+            await page.render({ canvasContext: tempCtx, viewport: viewport }).promise;
+            const imgDataUrl = tempCanvas.toDataURL('image/png');
+
+            const targetIdx = startPageIndex + (i - 1);
+            AppState.pages[targetIdx] = '';
+            AppState.pageTemplates[targetIdx] = 'pdf';
+            AppState.pagePdfBackgrounds[targetIdx] = imgDataUrl;
+            AppState.pageImages[targetIdx] = [];
+          }
+
+          AppState.currentPageIndex = startPageIndex;
+          PageManager.loadPage(startPageIndex);
+          PageManager.updateUI();
+          lucide.createIcons();
+        } catch (err) {
+          console.error('Error importing PDF document:', err);
+          alert('Failed to import PDF document. Please try another PDF file.');
+        }
+      }
+    };
+
     // --- APP INITIALIZATION ---
     window.addEventListener('load', () => {
       AppState.pages.push('');
       AppState.pageTemplates.push('ruled');
       AppState.pageImages.push([]);
+      AppState.pagePdfBackgrounds.push(null);
 
       CanvasEngine.init();
       DrawingEngine.init();
       ImageManager.init();
+      PdfEngine.init();
       UIController.init();
       PageManager.updateUI();
     });
